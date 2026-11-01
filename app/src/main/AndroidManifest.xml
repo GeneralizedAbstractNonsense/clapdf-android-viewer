@@ -4,7 +4,7 @@
 	>
 	<application
 		android:label="ClaPDF Viewer"
-		android:icon="@drawable/ic_mupdf"
+		android:icon="@drawable/ic_clapdf"
 		>
 		<activity
 			android:name="com.artifex.mupdf.viewer.app.LibraryActivity"

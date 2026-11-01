@@ -142,6 +142,7 @@ public class PageView extends ViewGroup {
 	protected     Link      mLinks[];
 	private       View      mSearchView;
 	private       boolean   mIsBlank;
+	private       boolean   mNeedsMeasure = true;
 	private       boolean   mHighlightLinks;
 	private       boolean   mDarkMode;
 
@@ -263,6 +264,7 @@ public class PageView extends ViewGroup {
 	public void blank(int page) {
 		reinit();
 		mPageNumber = page;
+		mNeedsMeasure = true;
 
 		if (mBusyIndicator == null) {
 			mBusyIndicator = new ProgressBar(mContext);
@@ -319,6 +321,7 @@ public class PageView extends ViewGroup {
 		}
 
 		mIsBlank = false;
+		mNeedsMeasure = true;
 		// Highlights may be missing because mIsBlank was true on last draw
 		if (mSearchView != null)
 			mSearchView.invalidate();
@@ -496,17 +499,29 @@ public class PageView extends ViewGroup {
 		return true;
 	}
 
-	private com.artifex.mupdf.fitz.Point pagePoint(float x, float y) {
+	public com.artifex.mupdf.fitz.Point getSelectionAnchor() {
+		return mSelectionAnchor != null
+				? new com.artifex.mupdf.fitz.Point(mSelectionAnchor) : null;
+	}
+
+	public com.artifex.mupdf.fitz.Point pagePoint(float x, float y) {
 		float scale = mSourceScale * (float)getWidth() / (float)mSize.x;
 		return new com.artifex.mupdf.fitz.Point((x - getLeft()) / scale, (y - getTop()) / scale);
 	}
 
-	private void setTextSelection(MuPDFCore.TextSelection selection) {
+	public void setTextSelection(MuPDFCore.TextSelection selection) {
 		mTextSelectionBoxes = selection.quads;
 		mSelectionStart = selection.start;
 		mSelectionEnd = selection.end;
 		if (mSearchView != null)
 			mSearchView.invalidate();
+	}
+
+	public MuPDFCore.TextSelection getTextSelection() {
+		if (!hasTextSelection())
+			return null;
+		return new MuPDFCore.TextSelection(new com.artifex.mupdf.fitz.Point(mSelectionStart),
+				new com.artifex.mupdf.fitz.Point(mSelectionEnd), mTextSelectionBoxes);
 	}
 
 	public String getSelectedText() {
@@ -748,6 +763,14 @@ public class PageView extends ViewGroup {
 
 	public int getPage() {
 		return mPageNumber;
+	}
+
+	public boolean needsMeasure() {
+		return mNeedsMeasure;
+	}
+
+	public void setMeasured() {
+		mNeedsMeasure = false;
 	}
 
 	@Override

@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Point;
 import android.graphics.PointF;
+import com.artifex.mupdf.fitz.Rect;
 import android.util.Log;
 import android.util.SparseArray;
 import android.view.View;
@@ -54,6 +55,20 @@ public class PageAdapter extends BaseAdapter {
 
 	public void refresh() {
 		mPageSizes.clear();
+	}
+
+	public Rect getPageBounds(int pageNumber) {
+		return mCore.getPageBounds(pageNumber);
+	}
+
+	public MuPDFCore.TextSelection selectText(int pageNumber,
+			com.artifex.mupdf.fitz.Point start, com.artifex.mupdf.fitz.Point end) {
+		return mCore.selectText(pageNumber, start, end,
+				com.artifex.mupdf.fitz.StructuredText.SELECT_WORDS);
+	}
+
+	public String copyText(int pageNumber, MuPDFCore.TextSelection selection) {
+		return mCore.copyText(pageNumber, selection.start, selection.end);
 	}
 
 	public void setDarkMode(boolean darkMode) {

@@ -10,6 +10,7 @@ import android.content.Context;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.net.Uri;
+import android.os.Build;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -34,7 +35,17 @@ public class ReaderView
 	private boolean mSelectingText;
 	private int tapPageMargin;
 	private TextSelectionListener mTextSelectionListener;
-	private PageView mTextSelectionPage;
+	private int mTextSelectionAnchorPage = -1;
+	private int mTextSelectionEndPage = -1;
+	private com.artifex.mupdf.fitz.Point mTextSelectionAnchor;
+	private float mSelectionPointerX;
+	private float mSelectionPointerY;
+	private final SparseArray<MuPDFCore.TextSelection> mPageSelections =
+			new SparseArray<MuPDFCore.TextSelection>();
+	private final SparseArray<String> mPageSelectionText = new SparseArray<String>();
+	private int mMeasuredWidth = -1;
+	private int mMeasuredHeight = -1;
+	private float mMeasuredScale = Float.NaN;
 
 	private static final int MOVING_DIAGONALLY = 0;
 	private static final int MOVING_LEFT       = 1;
@@ -153,6 +164,7 @@ public class ReaderView
 		mScrollerLastX = mScrollerLastY = 0;
 		mScale = MIN_SCALE;
 		mXScroll = mYScroll = 0;
+		mMeasuredScale = Float.NaN;
 		mScrollMode = scrollMode;
 		mResetLayout = true;
 		requestLayout();
@@ -171,26 +183,49 @@ public class ReaderView
 	}
 
 	public String getSelectedText() {
-		PageView pageView = mTextSelectionPage != null
-				? mTextSelectionPage : (PageView)getDisplayedView();
-		return pageView != null ? pageView.getSelectedText() : null;
+		if (mPageSelections.size() == 0)
+			return null;
+
+		StringBuilder selectedText = new StringBuilder();
+		for (int i = 0; i < mPageSelectionText.size(); i++) {
+			String pageText = mPageSelectionText.valueAt(i);
+			if (pageText == null || pageText.length() == 0)
+				continue;
+			if (selectedText.length() > 0)
+				selectedText.append('\n');
+			selectedText.append(pageText);
+		}
+		return selectedText.length() > 0 ? selectedText.toString() : null;
 	}
 
 	public boolean getTextSelectionBounds(Rect bounds) {
-		return mTextSelectionPage != null && mTextSelectionPage.getTextSelectionBounds(bounds);
+		PageView endPageView = (PageView)mChildViews.get(mTextSelectionEndPage);
+		if (endPageView != null && endPageView.getTextSelectionBounds(bounds))
+			return true;
+
+		for (int i = 0; i < mChildViews.size(); i++) {
+			int pageNumber = mChildViews.keyAt(i);
+			PageView pageView = (PageView)mChildViews.valueAt(i);
+			if (mPageSelections.get(pageNumber) == null
+					|| !pageView.getTextSelectionBounds(bounds))
+				continue;
+			return true;
+		}
+		return false;
 	}
 
 	public void clearTextSelection() {
-		boolean hadSelection = false;
 		for (int i = 0; i < mChildViews.size(); i++) {
 			PageView pageView = (PageView)mChildViews.valueAt(i);
-			if (pageView.hasTextSelection()) {
-				pageView.clearTextSelection();
-				hadSelection = true;
-			}
+			pageView.clearTextSelection();
 		}
+		boolean hadSelection = mPageSelections.size() > 0;
+		mPageSelections.clear();
+		mPageSelectionText.clear();
 		mSelectingText = false;
-		mTextSelectionPage = null;
+		mTextSelectionAnchorPage = -1;
+		mTextSelectionEndPage = -1;
+		mTextSelectionAnchor = null;
 		if (hadSelection && mTextSelectionListener != null)
 			mTextSelectionListener.onTextSelectionChanged(false);
 	}
@@ -419,6 +454,7 @@ public class ReaderView
 		mResetLayout = true;
 
 		mScale = 1.0f;
+		mMeasuredScale = Float.NaN;
 		mXScroll = mYScroll = 0;
 
 		/* All page views need recreating since both page and screen has changed size,
@@ -445,6 +481,18 @@ public class ReaderView
 	}
 
 	public void run() {
+		if (mSelectingText && mScrollMode == ScrollMode.Continuous && canAutoScrollSelection()) {
+			int edge = getSelectionEdgeSize();
+			int step = Math.max(1, (int)(18 * getResources().getDisplayMetrics().density));
+			if (mSelectionPointerY < edge && mCurrent > 0)
+				mYScroll += step;
+			else if (mSelectionPointerY > getHeight() - edge && mCurrent + 1 < mAdapter.getCount())
+				mYScroll -= step;
+			requestLayout();
+			mStepper.prod();
+			return;
+		}
+
 		if (!mScroller.isFinished()) {
 			mScroller.computeScrollOffset();
 			int x = mScroller.getCurrX();
@@ -528,15 +576,138 @@ public class ReaderView
 	}
 
 	public void onLongPress(MotionEvent e) {
-		if (mTextSelectionPage != null)
+		if (mPageSelections.size() > 0)
 			clearTextSelection();
 		PageView pageView = getPageViewAt(e.getX(), e.getY());
 		if (pageView != null && pageView.startTextSelection(e.getX(), e.getY())) {
-			mTextSelectionPage = pageView;
+			mTextSelectionAnchorPage = pageView.getPage();
+			mTextSelectionEndPage = mTextSelectionAnchorPage;
+			mTextSelectionAnchor = pageView.getSelectionAnchor();
+			mSelectionPointerX = e.getX();
+			mSelectionPointerY = e.getY();
+			replacePageSelection(mTextSelectionAnchorPage, pageView.getTextSelection());
 			mSelectingText = true;
 			if (mTextSelectionListener != null)
 				mTextSelectionListener.onTextSelectionChanged(true);
 		}
+	}
+
+	private void replacePageSelection(int pageNumber, MuPDFCore.TextSelection selection) {
+		if (selection == null) {
+			mPageSelections.remove(pageNumber);
+			mPageSelectionText.remove(pageNumber);
+			PageView pageView = (PageView)mChildViews.get(pageNumber);
+			if (pageView != null)
+				pageView.clearTextSelection();
+			return;
+		}
+
+		mPageSelections.put(pageNumber, selection);
+		mPageSelectionText.put(pageNumber, mAdapter.copyText(pageNumber, selection));
+		PageView pageView = (PageView)mChildViews.get(pageNumber);
+		if (pageView != null)
+			pageView.setTextSelection(selection);
+	}
+
+	private boolean updateTextSelection(float x, float y) {
+		if (!mSelectingText || mTextSelectionAnchor == null)
+			return false;
+		mSelectionPointerX = x;
+		mSelectionPointerY = y;
+
+		PageView endPageView = getPageViewAt(x, y);
+		if (endPageView == null)
+			return false;
+		int targetPage = endPageView.getPage();
+		if (mScrollMode != ScrollMode.Continuous && targetPage != mTextSelectionAnchorPage)
+			return false;
+
+		com.artifex.mupdf.fitz.Point targetPoint = endPageView.pagePoint(x, y);
+		int firstPage = Math.min(mTextSelectionAnchorPage, targetPage);
+		int lastPage = Math.max(mTextSelectionAnchorPage, targetPage);
+		if (targetPage == mTextSelectionEndPage) {
+			com.artifex.mupdf.fitz.Point start;
+			com.artifex.mupdf.fitz.Point end;
+			if (targetPage == mTextSelectionAnchorPage) {
+				start = mTextSelectionAnchor;
+				end = targetPoint;
+			} else if (targetPage > mTextSelectionAnchorPage) {
+				start = pageBoundsPoint(targetPage, true);
+				end = targetPoint;
+			} else {
+				start = targetPoint;
+				end = pageBoundsPoint(targetPage, false);
+			}
+			replacePageSelection(targetPage, mAdapter.selectText(targetPage, start, end));
+		} else {
+			for (int i = 0; i < mChildViews.size(); i++)
+				((PageView)mChildViews.valueAt(i)).clearTextSelection();
+			mPageSelections.clear();
+			mPageSelectionText.clear();
+
+			for (int pageNumber = firstPage; pageNumber <= lastPage; pageNumber++) {
+				com.artifex.mupdf.fitz.Point start;
+				com.artifex.mupdf.fitz.Point end;
+				if (firstPage == lastPage) {
+					start = mTextSelectionAnchor;
+					end = targetPoint;
+				} else if (pageNumber == firstPage) {
+					if (targetPage == firstPage) {
+						start = targetPoint;
+						end = pageBoundsPoint(pageNumber, false);
+					} else {
+						start = mTextSelectionAnchor;
+						end = pageBoundsPoint(pageNumber, false);
+					}
+				} else if (pageNumber == lastPage) {
+					if (targetPage == lastPage) {
+						start = pageBoundsPoint(pageNumber, true);
+						end = targetPoint;
+					} else {
+						start = pageBoundsPoint(pageNumber, true);
+						end = mTextSelectionAnchor;
+					}
+				} else {
+					start = pageBoundsPoint(pageNumber, true);
+					end = pageBoundsPoint(pageNumber, false);
+				}
+				replacePageSelection(pageNumber, mAdapter.selectText(pageNumber, start, end));
+			}
+			for (int i = 0; i < mChildViews.size(); i++) {
+				int pageNumber = mChildViews.keyAt(i);
+				MuPDFCore.TextSelection selection = mPageSelections.get(pageNumber);
+				if (selection != null)
+					((PageView)mChildViews.valueAt(i)).setTextSelection(selection);
+			}
+		}
+
+		mTextSelectionEndPage = targetPage;
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && mTextSelectionListener != null)
+			mTextSelectionListener.onTextSelectionChanged(true);
+		return true;
+	}
+
+	private com.artifex.mupdf.fitz.Point pageBoundsPoint(int pageNumber, boolean start) {
+		com.artifex.mupdf.fitz.Rect bounds = mAdapter.getPageBounds(pageNumber);
+		return start
+				? new com.artifex.mupdf.fitz.Point(bounds.x0, bounds.y0)
+				: new com.artifex.mupdf.fitz.Point(bounds.x1, bounds.y1);
+	}
+
+	private int getSelectionEdgeSize() {
+		return (int)(48 * getResources().getDisplayMetrics().density);
+	}
+
+	private boolean isSelectionNearEdge() {
+		return mSelectionPointerY < getSelectionEdgeSize()
+				|| mSelectionPointerY > getHeight() - getSelectionEdgeSize();
+	}
+
+	private boolean canAutoScrollSelection() {
+		return isSelectionNearEdge()
+				&& ((mSelectionPointerY < getSelectionEdgeSize() && mCurrent > 0)
+				|| (mSelectionPointerY > getHeight() - getSelectionEdgeSize()
+				&& mCurrent + 1 < mAdapter.getCount()));
 	}
 
 	private PageView getPageViewAt(float x, float y) {
@@ -600,7 +771,7 @@ public class ReaderView
 	}
 
 	public boolean onScaleBegin(ScaleGestureDetector detector) {
-		if (mTextSelectionPage != null)
+		if (mPageSelections.size() > 0)
 			clearTextSelection();
 		tapDisabled = true;
 		mScaling = true;
@@ -628,10 +799,9 @@ public class ReaderView
 		mGestureDetector.onTouchEvent(event);
 
 		if (mSelectingText && event.getActionMasked() == MotionEvent.ACTION_MOVE
-				&& mTextSelectionPage != null
-				&& mTextSelectionPage.extendTextSelection(event.getX(), event.getY())
-				&& mTextSelectionListener != null)
-			mTextSelectionListener.onTextSelectionChanged(true);
+				&& updateTextSelection(event.getX(), event.getY())
+				&& mScrollMode == ScrollMode.Continuous && canAutoScrollSelection())
+			mStepper.prod();
 
 		if ((event.getAction() & MotionEvent.ACTION_MASK) == MotionEvent.ACTION_DOWN) {
 			mUserInteracting = true;
@@ -666,9 +836,20 @@ public class ReaderView
 	protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
 		super.onMeasure(widthMeasureSpec, heightMeasureSpec);
 
-		int n = getChildCount();
-		for (int i = 0; i < n; i++)
-			measureView(getChildAt(i));
+		int width = getMeasuredWidth();
+		int height = getMeasuredHeight();
+		boolean resize = width != mMeasuredWidth || height != mMeasuredHeight
+				|| Float.compare(mScale, mMeasuredScale) != 0;
+		for (int i = 0; i < getChildCount(); i++) {
+			PageView pageView = (PageView)getChildAt(i);
+			if (resize || pageView.needsMeasure()) {
+				measureView(pageView);
+				pageView.setMeasured();
+			}
+		}
+		mMeasuredWidth = width;
+		mMeasuredHeight = height;
+		mMeasuredScale = mScale;
 	}
 
 	@Override
@@ -851,6 +1032,13 @@ public class ReaderView
 		}
 
 		invalidate();
+		if (mSelectingText && mScrollMode == ScrollMode.Continuous)
+			post(new Runnable() {
+				@Override
+				public void run() {
+					updateTextSelection(mSelectionPointerX, mSelectionPointerY);
+				}
+			});
 	}
 
 	@Override
@@ -868,6 +1056,9 @@ public class ReaderView
 		if (mAdapter != null && mAdapter != adapter)
 			mAdapter.releaseBitmaps();
 		mAdapter = (PageAdapter) adapter;
+		mMeasuredWidth = -1;
+		mMeasuredHeight = -1;
+		mMeasuredScale = Float.NaN;
 
 		requestLayout();
 	}
@@ -903,6 +1094,7 @@ public class ReaderView
 		addViewInLayout(v, 0, params, true);
 		mChildViews.append(i, v); // Record the view against its adapter index
 		measureView(v);
+		((PageView)v).setMeasured();
 	}
 
 	private void measureView(View v) {
@@ -1011,7 +1203,7 @@ public class ReaderView
 	public boolean onSingleTapUp(MotionEvent e) {
 		Link link = null;
 		if (!tapDisabled) {
-			if (mTextSelectionPage != null && mTextSelectionPage.hasTextSelection()) {
+			if (mPageSelections.size() > 0) {
 				clearTextSelection();
 				return true;
 			}
@@ -1047,6 +1239,9 @@ public class ReaderView
 			((PageView) v).setSearchBoxes(null);
 
 		((PageView) v).setLinkHighlighting(mLinksEnabled);
+		MuPDFCore.TextSelection selection = mPageSelections.get(i);
+		if (selection != null)
+			((PageView)v).setTextSelection(selection);
 	}
 
 	protected void onMoveToChild(int i) {

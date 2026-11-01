@@ -141,6 +141,11 @@ public class MuPDFCore
 		return new PointF(pageWidth, pageHeight);
 	}
 
+	public synchronized Rect getPageBounds(int pageNum) {
+		gotoPage(pageNum);
+		return page != null ? new Rect(page.getBounds()) : Rect.Empty();
+	}
+
 	public synchronized void onDestroy() {
 		clearStructuredText();
 		if (displayList != null)

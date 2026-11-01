@@ -6,6 +6,7 @@
 	<string name="dismiss">Dismiss</string>
 	<string name="enable_dark_mode">Enable dark mode</string>
 	<string name="disable_dark_mode">Disable dark mode</string>
+	<string name="open_links">Open links</string>
 	<string name="enter_password">Enter password</string>
 	<string name="scroll_mode">Scroll mode</string>
 	<string name="scroll_vertical">Vertical</string>
@@ -15,6 +16,10 @@
 	<string name="not_supported">Not supported</string>
 	<string name="okay">Okay</string>
 	<string name="search">Search&#x2026;</string>
+	<string name="search_previous">Previous result</string>
+	<string name="search_next">Next result</string>
+	<string name="layout">Document layout</string>
+	<string name="outline">Document outline</string>
 	<string name="searching_">Searching&#x2026;</string>
 	<string name="text_not_found">Text not found</string>
 	<string name="toast_file_uris_not_allowed">Android does not allow following file:// link: </string>
