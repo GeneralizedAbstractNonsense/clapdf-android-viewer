@@ -52,6 +52,24 @@
 					/>
 
 				<ImageButton
+					android:id="@+id/darkModeButton"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:background="@drawable/button"
+					android:contentDescription="@string/enable_dark_mode"
+					android:src="@drawable/ic_invert_colors_white_24dp"
+					/>
+
+				<ImageButton
+					android:id="@+id/scrollModeButton"
+					android:layout_width="wrap_content"
+					android:layout_height="wrap_content"
+					android:background="@drawable/button"
+					android:contentDescription="@string/scroll_mode"
+					android:src="@drawable/ic_view_carousel_white_24dp"
+					/>
+
+				<ImageButton
 					android:id="@+id/searchButton"
 					android:layout_width="wrap_content"
 					android:layout_height="wrap_content"

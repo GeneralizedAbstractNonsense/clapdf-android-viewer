@@ -18,6 +18,7 @@ public class PageAdapter extends BaseAdapter {
 	private final SparseArray<PointF> mPageSizes = new SparseArray<PointF>();
 	private       Bitmap mSharedHqBm1;
 	private       Bitmap mSharedHqBm2;
+	private       boolean mDarkMode;
 
 	public PageAdapter(Context c, MuPDFCore core) {
 		mContext = c;
@@ -55,6 +56,10 @@ public class PageAdapter extends BaseAdapter {
 		mPageSizes.clear();
 	}
 
+	public void setDarkMode(boolean darkMode) {
+		mDarkMode = darkMode;
+	}
+
 	public synchronized View getView(final int position, View convertView, ViewGroup parent) {
 		final PageView pageView;
 		if (convertView == null) {
@@ -73,6 +78,7 @@ public class PageAdapter extends BaseAdapter {
 		} else {
 			pageView = (PageView) convertView;
 		}
+		pageView.setDarkMode(mDarkMode);
 
 		PointF pageSize = mPageSizes.get(position);
 		if (pageSize != null) {

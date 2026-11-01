@@ -17,12 +17,16 @@ import android.graphics.Bitmap.Config;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.ColorMatrix;
+import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Point;
 import android.graphics.PointF;
 import android.graphics.Rect;
+import android.graphics.RectF;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Build;
@@ -43,9 +47,45 @@ import android.os.AsyncTask;
 
 // Make our ImageViews opaque to optimize redraw
 class OpaqueImageView extends ImageView {
+	private RectF[] mOriginalColorAreas;
+	private boolean mDarkMode;
 
 	public OpaqueImageView(Context context) {
 		super(context);
+	}
+
+	public void setOriginalColorAreas(RectF[] areas) {
+		mOriginalColorAreas = areas;
+		invalidate();
+	}
+
+	public void setDarkMode(boolean darkMode) {
+		mDarkMode = darkMode;
+		invalidate();
+	}
+
+	@Override
+	protected void onDraw(Canvas canvas) {
+		super.onDraw(canvas);
+		if (!mDarkMode || mOriginalColorAreas == null || mOriginalColorAreas.length == 0)
+			return;
+
+		Drawable drawable = getDrawable();
+		if (!(drawable instanceof BitmapDrawable))
+			return;
+
+		Bitmap bitmap = ((BitmapDrawable)drawable).getBitmap();
+		Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG);
+		int save = canvas.save();
+		canvas.translate(getPaddingLeft(), getPaddingTop());
+		canvas.concat(getImageMatrix());
+		for (RectF area : mOriginalColorAreas) {
+			int areaSave = canvas.save();
+			canvas.clipRect(area);
+			canvas.drawBitmap(bitmap, 0, 0, paint);
+			canvas.restoreToCount(areaSave);
+		}
+		canvas.restoreToCount(save);
 	}
 
 	@Override
@@ -59,9 +99,17 @@ public class PageView extends ViewGroup {
 	private final MuPDFCore mCore;
 
 	private static final int HIGHLIGHT_COLOR = 0x80cc6600;
+	private static final int TEXT_SELECTION_COLOR = 0x805B9BFF;
 	private static final int LINK_COLOR = 0x800066cc;
 	private static final int BOX_COLOR = 0xFF4444FF;
 	private static final int BACKGROUND_COLOR = 0xFFFFFFFF;
+	private static final int DARK_BACKGROUND_COLOR = Color.BLACK;
+	private static final ColorMatrixColorFilter INVERT_COLOR_FILTER = new ColorMatrixColorFilter(new ColorMatrix(new float[] {
+		-1, 0, 0, 0, 255,
+		0, -1, 0, 0, 255,
+		0, 0, -1, 0, 255,
+		0, 0, 0, 1, 0
+	}));
 	private static final int PROGRESS_DIALOG_DELAY = 200;
 
 	protected final Context mContext;
@@ -87,10 +135,14 @@ public class PageView extends ViewGroup {
 	private       CancellableAsyncTask<Void, Boolean> mDrawPatch;
 
 	private       Quad      mSearchBoxes[][];
+	private       Quad[]    mTextSelectionBoxes;
+	private       com.artifex.mupdf.fitz.Point mSelectionAnchor;
+	private       String    mSelectedText;
 	protected     Link      mLinks[];
 	private       View      mSearchView;
 	private       boolean   mIsBlank;
 	private       boolean   mHighlightLinks;
+	private       boolean   mDarkMode;
 
 	private       ImageView mErrorIndicator;
 
@@ -102,11 +154,31 @@ public class PageView extends ViewGroup {
 		mContext = c;
 		mCore = core;
 		mParentSize = parentSize;
-		setBackgroundColor(BACKGROUND_COLOR);
+		setBackgroundColor(getPageBackgroundColor());
 		mEntireBm = Bitmap.createBitmap(parentSize.x, parentSize.y, Config.ARGB_8888);
 		mPatchBm = sharedHqBm1;
 		mOldPatchBm = sharedHqBm2;
 		mEntireMat = new Matrix();
+	}
+
+	public void setDarkMode(boolean darkMode) {
+		mDarkMode = darkMode;
+		ColorMatrixColorFilter filter = darkMode ? INVERT_COLOR_FILTER : null;
+		if (mEntire != null) {
+			((OpaqueImageView)mEntire).setDarkMode(darkMode);
+			mEntire.setColorFilter(filter);
+		}
+		if (mPatch != null) {
+			((OpaqueImageView)mPatch).setDarkMode(darkMode);
+			mPatch.setColorFilter(filter);
+		}
+		if (mErrorIndicator != null)
+			mErrorIndicator.setBackgroundColor(getPageBackgroundColor());
+		setBackgroundColor(getPageBackgroundColor());
+	}
+
+	private int getPageBackgroundColor() {
+		return mDarkMode ? DARK_BACKGROUND_COLOR : BACKGROUND_COLOR;
 	}
 
 	private void reinit() {
@@ -134,11 +206,13 @@ public class PageView extends ViewGroup {
 
 		if (mEntire != null) {
 			mEntire.setImageBitmap(null);
+			((OpaqueImageView)mEntire).setOriginalColorAreas(null);
 			mEntire.invalidate();
 		}
 
 		if (mPatch != null) {
 			mPatch.setImageBitmap(null);
+			((OpaqueImageView)mPatch).setOriginalColorAreas(null);
 			mPatch.invalidate();
 		}
 
@@ -146,7 +220,12 @@ public class PageView extends ViewGroup {
 		mPatchArea = null;
 
 		mSearchBoxes = null;
+		mTextSelectionBoxes = null;
+		mSelectionAnchor = null;
+		mSelectedText = null;
 		mLinks = null;
+		if (mSearchView != null)
+			mSearchView.invalidate();
 
 		clearRenderError();
 	}
@@ -189,7 +268,7 @@ public class PageView extends ViewGroup {
 			addView(mBusyIndicator);
 		}
 
-		setBackgroundColor(BACKGROUND_COLOR);
+		setBackgroundColor(getPageBackgroundColor());
 	}
 
 	protected void clearRenderError() {
@@ -222,7 +301,7 @@ public class PageView extends ViewGroup {
 			addView(mErrorIndicator);
 			Drawable mErrorIcon = getResources().getDrawable(R.drawable.ic_error_red_24dp);
 			mErrorIndicator.setImageDrawable(mErrorIcon);
-			mErrorIndicator.setBackgroundColor(BACKGROUND_COLOR);
+			mErrorIndicator.setBackgroundColor(getPageBackgroundColor());
 		}
 
 		setBackgroundColor(Color.TRANSPARENT);
@@ -261,6 +340,8 @@ public class PageView extends ViewGroup {
 		if (mEntire == null) {
 			mEntire = new OpaqueImageView(mContext);
 			mEntire.setScaleType(ImageView.ScaleType.MATRIX);
+			((OpaqueImageView)mEntire).setDarkMode(mDarkMode);
+			mEntire.setColorFilter(mDarkMode ? INVERT_COLOR_FILTER : null);
 			addView(mEntire);
 		}
 
@@ -283,11 +364,12 @@ public class PageView extends ViewGroup {
 		mGetLinkInfo.execute();
 
 		// Render the page in the background
-		mDrawEntire = new CancellableAsyncTask<Void, Boolean>(getDrawPageTask(mEntireBm, mSize.x, mSize.y, 0, 0, mSize.x, mSize.y)) {
+		final RectF[][] entireImageAreas = new RectF[1][];
+		mDrawEntire = new CancellableAsyncTask<Void, Boolean>(getDrawPageTask(mEntireBm, mSize.x, mSize.y, 0, 0, mSize.x, mSize.y, entireImageAreas)) {
 
 			@Override
 			public void onPreExecute() {
-				setBackgroundColor(BACKGROUND_COLOR);
+				setBackgroundColor(getPageBackgroundColor());
 				mEntire.setImageBitmap(null);
 				mEntire.invalidate();
 
@@ -311,6 +393,7 @@ public class PageView extends ViewGroup {
 				mBusyIndicator = null;
 				if (result.booleanValue()) {
 					clearRenderError();
+					((OpaqueImageView)mEntire).setOriginalColorAreas(entireImageAreas[0]);
 					mEntire.setImageBitmap(mEntireBm);
 					mEntire.invalidate();
 				} else {
@@ -347,6 +430,19 @@ public class PageView extends ViewGroup {
 						}
 					}
 
+					if (!mIsBlank && mTextSelectionBoxes != null) {
+						paint.setColor(TEXT_SELECTION_COLOR);
+						for (Quad q : mTextSelectionBoxes) {
+							Path path = new Path();
+							path.moveTo(q.ul_x * scale, q.ul_y * scale);
+							path.lineTo(q.ll_x * scale, q.ll_y * scale);
+							path.lineTo(q.lr_x * scale, q.lr_y * scale);
+							path.lineTo(q.ur_x * scale, q.ur_y * scale);
+							path.close();
+							canvas.drawPath(path, paint);
+						}
+					}
+
 					if (!mIsBlank && mLinks != null && mHighlightLinks) {
 						paint.setColor(LINK_COLOR);
 						for (Link link : mLinks)
@@ -364,6 +460,63 @@ public class PageView extends ViewGroup {
 
 	public void setSearchBoxes(Quad searchBoxes[][]) {
 		mSearchBoxes = searchBoxes;
+		if (mSearchView != null)
+			mSearchView.invalidate();
+	}
+
+	public boolean startTextSelection(float x, float y) {
+		if (mIsBlank || mSize == null || mSize.x == 0 || getWidth() == 0 || mSourceScale == 0)
+			return false;
+		com.artifex.mupdf.fitz.Point point = pagePoint(x, y);
+		MuPDFCore.TextSelection selection = mCore.selectText(mPageNumber,
+				new com.artifex.mupdf.fitz.Point(point), new com.artifex.mupdf.fitz.Point(point),
+				com.artifex.mupdf.fitz.StructuredText.SELECT_WORDS);
+		if (selection == null)
+			return false;
+
+		mSelectionAnchor = selection.start;
+		setTextSelection(selection);
+		return true;
+	}
+
+	public boolean extendTextSelection(float x, float y) {
+		if (mSelectionAnchor == null)
+			return false;
+
+		MuPDFCore.TextSelection selection = mCore.selectText(mPageNumber,
+				new com.artifex.mupdf.fitz.Point(mSelectionAnchor), pagePoint(x, y),
+				com.artifex.mupdf.fitz.StructuredText.SELECT_WORDS);
+		if (selection == null)
+			return false;
+
+		setTextSelection(selection);
+		return true;
+	}
+
+	private com.artifex.mupdf.fitz.Point pagePoint(float x, float y) {
+		float scale = mSourceScale * (float)getWidth() / (float)mSize.x;
+		return new com.artifex.mupdf.fitz.Point((x - getLeft()) / scale, (y - getTop()) / scale);
+	}
+
+	private void setTextSelection(MuPDFCore.TextSelection selection) {
+		mTextSelectionBoxes = selection.quads;
+		mSelectedText = selection.text;
+		if (mSearchView != null)
+			mSearchView.invalidate();
+	}
+
+	public String getSelectedText() {
+		return mSelectedText;
+	}
+
+	public boolean hasTextSelection() {
+		return mSelectedText != null;
+	}
+
+	public void clearTextSelection() {
+		mTextSelectionBoxes = null;
+		mSelectionAnchor = null;
+		mSelectedText = null;
 		if (mSearchView != null)
 			mSearchView.invalidate();
 	}
@@ -498,6 +651,8 @@ public class PageView extends ViewGroup {
 				// Create the mPatch image view if not already done
 				mPatch = new OpaqueImageView(mContext);
 				mPatch.setScaleType(ImageView.ScaleType.MATRIX);
+				((OpaqueImageView)mPatch).setDarkMode(mDarkMode);
+				mPatch.setColorFilter(mDarkMode ? INVERT_COLOR_FILTER : null);
 				addView(mPatch);
 
 				if (mSearchView != null)
@@ -506,9 +661,10 @@ public class PageView extends ViewGroup {
 
 			CancellableTaskDefinition<Void, Boolean> task;
 
+			final RectF[][] patchImageAreas = new RectF[1][];
 			task = getDrawPageTask(mPatchBm, patchViewSize.x, patchViewSize.y,
 							patchArea.left, patchArea.top,
-							patchArea.width(), patchArea.height());
+							patchArea.width(), patchArea.height(), patchImageAreas);
 
 			mDrawPatch = new CancellableAsyncTask<Void, Boolean>(task) {
 
@@ -517,6 +673,7 @@ public class PageView extends ViewGroup {
 						mPatchViewSize = patchViewSize;
 						mPatchArea = patchArea;
 						clearRenderError();
+						((OpaqueImageView)mPatch).setOriginalColorAreas(patchImageAreas[0]);
 						mPatch.setImageBitmap(mPatchBm);
 						mPatch.invalidate();
 
@@ -598,7 +755,8 @@ public class PageView extends ViewGroup {
 	}
 
 	protected CancellableTaskDefinition<Void, Boolean> getDrawPageTask(final Bitmap bm, final int sizeX, final int sizeY,
-			final int patchX, final int patchY, final int patchWidth, final int patchHeight) {
+			final int patchX, final int patchY, final int patchWidth, final int patchHeight,
+			final RectF[][] imageAreas) {
 		return new MuPDFCancellableTaskDefinition<Void, Boolean>() {
 			@Override
 			public Boolean doInBackground(Cookie cookie, Void ... params) {
@@ -610,7 +768,8 @@ public class PageView extends ViewGroup {
 						Build.VERSION.SDK_INT < Build.VERSION_CODES.ICE_CREAM_SANDWICH)
 					bm.eraseColor(0);
 				try {
-					mCore.drawPage(bm, mPageNumber, sizeX, sizeY, patchX, patchY, patchWidth, patchHeight, cookie);
+					imageAreas[0] = mCore.drawPageWithImageAreas(bm, mPageNumber, sizeX, sizeY,
+							patchX, patchY, patchWidth, patchHeight, cookie);
 					return new Boolean(true);
 				} catch (RuntimeException e) {
 					return new Boolean(false);

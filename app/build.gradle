@@ -14,6 +14,7 @@ android {
 	namespace 'com.artifex.mupdf.viewer.app'
 	compileSdkVersion 33
 	defaultConfig {
+		applicationId 'com.clapdf.android.viewer'
 		minSdkVersion 21
 		targetSdkVersion 36
 		versionName '1.28.5a'

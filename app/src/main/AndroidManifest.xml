@@ -3,11 +3,11 @@
 	android:installLocation="auto"
 	>
 	<application
-		android:label="MuPDF viewer"
+		android:label="ClaPDF Viewer"
 		android:icon="@drawable/ic_mupdf"
 		>
 		<activity
-			android:name=".LibraryActivity"
+			android:name="com.artifex.mupdf.viewer.app.LibraryActivity"
 			android:exported="true"
 			>
 			<intent-filter>

@@ -6,6 +6,8 @@ import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ContentResolver;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.DialogInterface.OnCancelListener;
 import android.content.DialogInterface;
@@ -30,6 +32,7 @@ import android.text.method.PasswordTransformationMethod;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.KeyEvent;
+import android.view.ActionMode;
 import android.view.Menu;
 import android.view.MenuItem.OnMenuItemClickListener;
 import android.view.MenuItem;
@@ -84,6 +87,8 @@ public class DocumentActivity extends Activity
 	private TextView     mPageNumberView;
 	private ImageButton  mSearchButton;
 	private ImageButton  mOutlineButton;
+	private ImageButton  mDarkModeButton;
+		private ImageButton  mScrollModeButton;
 	private ViewAnimator mTopBarSwitcher;
 	private LinearLayout mTopBar;
 	private LinearLayout mActionBar;
@@ -103,6 +108,7 @@ public class DocumentActivity extends Activity
 	private AlertDialog mAlertDialog;
 	private ArrayList<OutlineActivity.Item> mFlatOutline;
 	private boolean mReturnToLibraryActivity = false;
+	private boolean mDarkMode;
 
 	protected int mDisplayDPI;
 	private int mLayoutEM = 10;
@@ -113,6 +119,41 @@ public class DocumentActivity extends Activity
 
 	protected View mLayoutButton;
 	protected PopupMenu mLayoutPopupMenu;
+	private PopupMenu mScrollModePopupMenu;
+	private ActionMode mTextSelectionActionMode;
+	private final ActionMode.Callback mTextSelectionActionModeCallback = new ActionMode.Callback() {
+		@Override
+		public boolean onCreateActionMode(ActionMode mode, Menu menu) {
+			menu.add(Menu.NONE, android.R.id.copy, Menu.NONE, android.R.string.copy)
+					.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
+			return true;
+		}
+
+		@Override
+		public boolean onPrepareActionMode(ActionMode mode, Menu menu) {
+			return false;
+		}
+
+		@Override
+		public boolean onActionItemClicked(ActionMode mode, MenuItem item) {
+			if (item.getItemId() != android.R.id.copy)
+				return false;
+
+			String text = mDocView.getSelectedText();
+			ClipboardManager clipboard = (ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE);
+			if (text != null && clipboard != null)
+				clipboard.setPrimaryClip(ClipData.newPlainText(getString(android.R.string.copy), text));
+			mode.finish();
+			return true;
+		}
+
+		@Override
+		public void onDestroyActionMode(ActionMode mode) {
+			mTextSelectionActionMode = null;
+			if (mDocView != null)
+				mDocView.clearTextSelection();
+		}
+	};
 
 	private String toHex(byte[] digest) {
 		StringBuilder builder = new StringBuilder(2 * digest.length);
@@ -415,6 +456,17 @@ public class DocumentActivity extends Activity
 			}
 		};
 		mDocView.setAdapter(new PageAdapter(this, core));
+		mDocView.setTextSelectionListener(new ReaderView.TextSelectionListener() {
+			@Override
+			public void onTextSelectionChanged(boolean hasSelection) {
+				if (hasSelection) {
+					if (mTextSelectionActionMode == null)
+						mTextSelectionActionMode = startActionMode(mTextSelectionActionModeCallback);
+				} else if (mTextSelectionActionMode != null) {
+					mTextSelectionActionMode.finish();
+				}
+			}
+		});
 
 		mSearchTask = new SearchTask(this, core) {
 			@Override
@@ -532,6 +584,43 @@ public class DocumentActivity extends Activity
 			}
 		});
 
+		mDarkModeButton.setOnClickListener(new View.OnClickListener() {
+			public void onClick(View v) {
+				setDarkMode(!mDarkMode);
+			}
+		});
+
+		mScrollModePopupMenu = new PopupMenu(this, mScrollModeButton);
+		mScrollModePopupMenu.getMenuInflater().inflate(R.menu.scroll_mode_menu, mScrollModePopupMenu.getMenu());
+		mScrollModePopupMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
+			public boolean onMenuItemClick(MenuItem item) {
+				ReaderView.ScrollMode mode;
+				int id = item.getItemId();
+				if (id == R.id.scroll_vertical)
+					mode = ReaderView.ScrollMode.Vertical;
+				else if (id == R.id.scroll_vertical_continuous)
+					mode = ReaderView.ScrollMode.VerticalContinuous;
+				else if (id == R.id.scroll_horizontal)
+					mode = ReaderView.ScrollMode.Horizontal;
+				else if (id == R.id.scroll_horizontal_continuous)
+					mode = ReaderView.ScrollMode.HorizontalContinuous;
+				else
+					return false;
+
+				mDocView.setScrollMode(mode);
+				getPreferences(Context.MODE_PRIVATE).edit()
+						.putString("scrollMode" + mDocKey, mode.name()).apply();
+				updateScrollModeMenu();
+				return true;
+			}
+		});
+		mScrollModeButton.setOnClickListener(new View.OnClickListener() {
+			public void onClick(View v) {
+				updateScrollModeMenu();
+				mScrollModePopupMenu.show();
+			}
+		});
+
 		if (core.isReflowable()) {
 			mLayoutButton.setVisibility(View.VISIBLE);
 			mLayoutPopupMenu = new PopupMenu(this, mLayoutButton);
@@ -590,6 +679,15 @@ public class DocumentActivity extends Activity
 
 		// Reenstate last state if it was recorded
 		SharedPreferences prefs = getPreferences(Context.MODE_PRIVATE);
+		setDarkMode(prefs.getBoolean("darkMode" + mDocKey, false));
+		ReaderView.ScrollMode scrollMode = ReaderView.ScrollMode.HorizontalContinuous;
+		try {
+			scrollMode = ReaderView.ScrollMode.valueOf(
+					prefs.getString("scrollMode" + mDocKey, scrollMode.name()));
+		} catch (IllegalArgumentException e) {
+		}
+		mDocView.setScrollMode(scrollMode);
+		updateScrollModeMenu();
 		mDocView.setDisplayedViewIndex(prefs.getInt("page"+mDocKey, 0));
 
 		if (savedInstanceState == null || !savedInstanceState.getBoolean("ButtonsHidden", false))
@@ -711,6 +809,34 @@ public class DocumentActivity extends Activity
 		mDocView.setLinksEnabled(highlight);
 	}
 
+	private void setDarkMode(boolean enabled) {
+		mDarkMode = enabled;
+		mDarkModeButton.setContentDescription(getString(enabled ? R.string.disable_dark_mode : R.string.enable_dark_mode));
+		((PageAdapter)mDocView.getAdapter()).setDarkMode(enabled);
+		mDocView.applyToChildren(new ReaderView.ViewMapper() {
+			@Override
+			public void applyToView(View view) {
+				((PageView)view).setDarkMode(enabled);
+			}
+		});
+		SharedPreferences prefs = getPreferences(Context.MODE_PRIVATE);
+		prefs.edit().putBoolean("darkMode" + mDocKey, enabled).apply();
+	}
+
+	private void updateScrollModeMenu() {
+		if (mScrollModePopupMenu == null)
+			return;
+		Menu menu = mScrollModePopupMenu.getMenu();
+		menu.findItem(R.id.scroll_vertical).setChecked(
+				mDocView.getScrollMode() == ReaderView.ScrollMode.Vertical);
+		menu.findItem(R.id.scroll_vertical_continuous).setChecked(
+				mDocView.getScrollMode() == ReaderView.ScrollMode.VerticalContinuous);
+		menu.findItem(R.id.scroll_horizontal).setChecked(
+				mDocView.getScrollMode() == ReaderView.ScrollMode.Horizontal);
+		menu.findItem(R.id.scroll_horizontal_continuous).setChecked(
+				mDocView.getScrollMode() == ReaderView.ScrollMode.HorizontalContinuous);
+	}
+
 	private void showButtons() {
 		if (core == null)
 			return;
@@ -830,6 +956,8 @@ public class DocumentActivity extends Activity
 		mSearchClose = (ImageButton)mButtonsView.findViewById(R.id.searchClose);
 		mSearchText = (EditText)mButtonsView.findViewById(R.id.searchText);
 		mLinkButton = (ImageButton)mButtonsView.findViewById(R.id.linkButton);
+		mDarkModeButton = (ImageButton)mButtonsView.findViewById(R.id.darkModeButton);
+		mScrollModeButton = (ImageButton)mButtonsView.findViewById(R.id.scrollModeButton);
 		mLayoutButton = mButtonsView.findViewById(R.id.layoutButton);
 		mTopBarSwitcher.setVisibility(View.INVISIBLE);
 		mPageNumberView.setVisibility(View.INVISIBLE);
