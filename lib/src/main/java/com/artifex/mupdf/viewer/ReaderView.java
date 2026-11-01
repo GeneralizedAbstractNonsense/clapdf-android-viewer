@@ -54,6 +54,7 @@ public class ReaderView
 	private static final int MOVING_DOWN       = 4;
 
 	private static final int FLING_MARGIN      = 100;
+	private static final int CONTINUOUS_FLING_LIMIT = 1000000;
 	private static final int GAP               = 20;
 
 	private static final float MIN_SCALE        = 1.0f;
@@ -526,7 +527,12 @@ public class ReaderView
 		View v = mChildViews.get(mCurrent);
 		if (v != null) {
 			Rect bounds = getScrollBounds(v);
-			switch(directionOfTravel(velocityX, velocityY)) {
+			if (mScrollMode == ScrollMode.Continuous) {
+				if (mCurrent > 0)
+					bounds.bottom = CONTINUOUS_FLING_LIMIT;
+				if (mCurrent + 1 < mAdapter.getCount())
+					bounds.top = -CONTINUOUS_FLING_LIMIT;
+			} else switch(directionOfTravel(velocityX, velocityY)) {
 			case MOVING_LEFT:
 				if (isHorizontalScroll() && bounds.left >= 0 && mCurrent + 1 < mAdapter.getCount()) {
 					moveToAdjacentPage(1);
@@ -813,7 +819,8 @@ public class ReaderView
 
 			View v = mChildViews.get(mCurrent);
 			if (v != null) {
-				if (!wasSelectingText && mScroller.isFinished()) {
+				if (!wasSelectingText && mScroller.isFinished()
+						&& mScrollMode != ScrollMode.Continuous) {
 					// If, at the end of user interaction, there is no
 					// current inertial scroll in operation then animate
 					// the view onto screen if necessary
@@ -969,7 +976,29 @@ public class ReaderView
 		cvRight = cvLeft + cv.getMeasuredWidth();
 		cvBottom = cvTop + cv.getMeasuredHeight();
 
-		if (!mUserInteracting && mScroller.isFinished()) {
+		if (mScrollMode == ScrollMode.Continuous) {
+			Rect bounds = getScrollBounds(cvLeft, cvTop, cvRight, cvBottom);
+			Point corr = getCorrection(bounds);
+			cvLeft += corr.x;
+			cvRight += corr.x;
+			int pageCount = mAdapter.getCount();
+			int correctionY = 0;
+			if (pageCount == 1) {
+				correctionY = corr.y;
+			} else if (mCurrent == 0) {
+				correctionY = Math.min(0, subScreenSizeOffset(cv).y - cvTop);
+			} else if (mCurrent == pageCount - 1) {
+				correctionY = Math.max(0, getHeight() - cvBottom);
+			}
+			if (correctionY != 0) {
+				cvTop += correctionY;
+				cvBottom += correctionY;
+				if (!mScroller.isFinished()) {
+					mScroller.forceFinished(true);
+					mScrollerLastX = mScrollerLastY = 0;
+				}
+			}
+		} else if (!mUserInteracting && mScroller.isFinished()) {
 			Point corr = getCorrection(getScrollBounds(cvLeft, cvTop, cvRight, cvBottom));
 			cvRight += corr.x;
 			cvLeft += corr.x;

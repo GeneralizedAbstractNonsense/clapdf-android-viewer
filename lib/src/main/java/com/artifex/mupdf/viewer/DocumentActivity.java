@@ -35,7 +35,6 @@ import android.util.Log;
 import android.view.KeyEvent;
 import android.view.ActionMode;
 import android.view.Menu;
-import android.view.MenuItem.OnMenuItemClickListener;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.Window;
@@ -48,7 +47,6 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
-import android.widget.PopupMenu;
 import android.widget.RelativeLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
@@ -119,8 +117,6 @@ public class DocumentActivity extends Activity
 	protected Insets systemInsets = Insets.NONE;
 
 	protected View mLayoutButton;
-	protected PopupMenu mLayoutPopupMenu;
-	private PopupMenu mScrollModePopupMenu;
 	private ActionMode mTextSelectionActionMode;
 	private final ActionMode.Callback mTextSelectionActionModeCallback = new ActionMode.Callback() {
 		@Override
@@ -629,62 +625,17 @@ public class DocumentActivity extends Activity
 			}
 		});
 
-		mScrollModePopupMenu = new PopupMenu(this, mScrollModeButton);
-		mScrollModePopupMenu.getMenuInflater().inflate(R.menu.scroll_mode_menu, mScrollModePopupMenu.getMenu());
-		mScrollModePopupMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
-			public boolean onMenuItemClick(MenuItem item) {
-				ReaderView.ScrollMode mode;
-				int id = item.getItemId();
-				if (id == R.id.scroll_vertical)
-					mode = ReaderView.ScrollMode.Vertical;
-				else if (id == R.id.scroll_horizontal)
-					mode = ReaderView.ScrollMode.Horizontal;
-				else if (id == R.id.scroll_continuous)
-					mode = ReaderView.ScrollMode.Continuous;
-				else
-					return false;
-
-				mDocView.setScrollMode(mode);
-				getPreferences(Context.MODE_PRIVATE).edit()
-						.putString("scrollMode" + mDocKey, mode.name()).apply();
-				updateScrollModeMenu();
-				return true;
-			}
-		});
 		mScrollModeButton.setOnClickListener(new View.OnClickListener() {
 			public void onClick(View v) {
-				updateScrollModeMenu();
-				mScrollModePopupMenu.show();
+				showScrollModeDialog();
 			}
 		});
 
 		if (core.isReflowable()) {
 			mLayoutButton.setVisibility(View.VISIBLE);
-			mLayoutPopupMenu = new PopupMenu(this, mLayoutButton);
-			mLayoutPopupMenu.getMenuInflater().inflate(R.menu.layout_menu, mLayoutPopupMenu.getMenu());
-			mLayoutPopupMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
-				public boolean onMenuItemClick(MenuItem item) {
-					float oldLayoutEM = mLayoutEM;
-					int id = item.getItemId();
-					if (id == R.id.action_layout_6pt) mLayoutEM = 6;
-					else if (id == R.id.action_layout_7pt) mLayoutEM = 7;
-					else if (id == R.id.action_layout_8pt) mLayoutEM = 8;
-					else if (id == R.id.action_layout_9pt) mLayoutEM = 9;
-					else if (id == R.id.action_layout_10pt) mLayoutEM = 10;
-					else if (id == R.id.action_layout_11pt) mLayoutEM = 11;
-					else if (id == R.id.action_layout_12pt) mLayoutEM = 12;
-					else if (id == R.id.action_layout_13pt) mLayoutEM = 13;
-					else if (id == R.id.action_layout_14pt) mLayoutEM = 14;
-					else if (id == R.id.action_layout_15pt) mLayoutEM = 15;
-					else if (id == R.id.action_layout_16pt) mLayoutEM = 16;
-					if (oldLayoutEM != mLayoutEM)
-						relayoutDocument();
-					return true;
-				}
-			});
 			mLayoutButton.setOnClickListener(new View.OnClickListener() {
 				public void onClick(View v) {
-					mLayoutPopupMenu.show();
+					showLayoutDialog();
 				}
 			});
 		}
@@ -727,7 +678,6 @@ public class DocumentActivity extends Activity
 		else
 			scrollMode = ReaderView.ScrollMode.Horizontal;
 		mDocView.setScrollMode(scrollMode);
-		updateScrollModeMenu();
 		mDocView.setDisplayedViewIndex(prefs.getInt("page"+mDocKey, 0));
 
 		if (savedInstanceState == null || !savedInstanceState.getBoolean("ButtonsHidden", false))
@@ -863,16 +813,62 @@ public class DocumentActivity extends Activity
 		prefs.edit().putBoolean("darkMode" + mDocKey, enabled).apply();
 	}
 
-	private void updateScrollModeMenu() {
-		if (mScrollModePopupMenu == null)
-			return;
-		Menu menu = mScrollModePopupMenu.getMenu();
-		menu.findItem(R.id.scroll_vertical).setChecked(
-				mDocView.getScrollMode() == ReaderView.ScrollMode.Vertical);
-		menu.findItem(R.id.scroll_horizontal).setChecked(
-				mDocView.getScrollMode() == ReaderView.ScrollMode.Horizontal);
-		menu.findItem(R.id.scroll_continuous).setChecked(
-				mDocView.getScrollMode() == ReaderView.ScrollMode.Continuous);
+	private void showScrollModeDialog() {
+		final ReaderView.ScrollMode[] modes = {
+				ReaderView.ScrollMode.Vertical,
+				ReaderView.ScrollMode.Horizontal,
+				ReaderView.ScrollMode.Continuous
+		};
+		String[] labels = {
+				getString(R.string.scroll_vertical),
+				getString(R.string.scroll_horizontal),
+				getString(R.string.scroll_continuous)
+		};
+		int selectedMode = 0;
+		for (int i = 0; i < modes.length; i++) {
+			if (modes[i] == mDocView.getScrollMode()) {
+				selectedMode = i;
+				break;
+			}
+		}
+
+		new AlertDialog.Builder(this)
+				.setTitle(R.string.scroll_mode)
+				.setSingleChoiceItems(labels, selectedMode, new DialogInterface.OnClickListener() {
+					@Override
+					public void onClick(DialogInterface dialog, int which) {
+						ReaderView.ScrollMode mode = modes[which];
+						mDocView.setScrollMode(mode);
+						getPreferences(Context.MODE_PRIVATE).edit()
+								.putString("scrollMode" + mDocKey, mode.name()).apply();
+						dialog.dismiss();
+					}
+				})
+				.show();
+	}
+
+	private void showLayoutDialog() {
+		final int minLayoutSize = 6;
+		final int maxLayoutSize = 16;
+		String[] sizes = new String[maxLayoutSize - minLayoutSize + 1];
+		for (int i = 0; i < sizes.length; i++)
+			sizes[i] = (minLayoutSize + i) + "pt";
+
+		new AlertDialog.Builder(this)
+				.setTitle(R.string.layout)
+				.setSingleChoiceItems(sizes, mLayoutEM - minLayoutSize,
+						new DialogInterface.OnClickListener() {
+							@Override
+							public void onClick(DialogInterface dialog, int which) {
+								int layoutSize = minLayoutSize + which;
+								if (mLayoutEM != layoutSize) {
+									mLayoutEM = layoutSize;
+									relayoutDocument();
+								}
+								dialog.dismiss();
+							}
+						})
+				.show();
 	}
 
 	private void showButtons() {
