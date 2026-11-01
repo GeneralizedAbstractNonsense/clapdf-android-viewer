@@ -9,9 +9,7 @@
 	<string name="enter_password">Enter password</string>
 	<string name="scroll_mode">Scroll mode</string>
 	<string name="scroll_vertical">Vertical</string>
-	<string name="scroll_vertical_continuous">Vertical continuous</string>
 	<string name="scroll_horizontal">Horizontal</string>
-	<string name="scroll_horizontal_continuous">Horizontal continuous</string>
 	<string name="no_further_occurrences_found">No further occurrences found</string>
 	<string name="not_supported">Not supported</string>
 	<string name="okay">Okay</string>

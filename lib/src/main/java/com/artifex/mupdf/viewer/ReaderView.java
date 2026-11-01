@@ -48,9 +48,9 @@ public class ReaderView
 	private static final float MIN_SCALE        = 1.0f;
 	private static final float MAX_SCALE        = 64.0f;
 
-	public enum ScrollMode {Vertical, VerticalContinuous, Horizontal, HorizontalContinuous};
+	public enum ScrollMode {Vertical, Horizontal};
 
-	private ScrollMode mScrollMode = ScrollMode.HorizontalContinuous;
+	private ScrollMode mScrollMode = ScrollMode.Horizontal;
 
 	private PageAdapter           mAdapter;
 	protected int               mCurrent;    // Adapter's index for the current view
@@ -163,11 +163,7 @@ public class ReaderView
 	}
 
 	private boolean isHorizontalScroll() {
-		return mScrollMode == ScrollMode.Horizontal || mScrollMode == ScrollMode.HorizontalContinuous;
-	}
-
-	private boolean isContinuousScroll() {
-		return mScrollMode == ScrollMode.VerticalContinuous || mScrollMode == ScrollMode.HorizontalContinuous;
+		return mScrollMode == ScrollMode.Horizontal;
 	}
 
 	public String getSelectedText() {
@@ -227,10 +223,6 @@ public class ReaderView
 		int page = mCurrent + direction;
 		if (page < 0 || page >= mAdapter.getCount())
 			return;
-		if (!isContinuousScroll()) {
-			setDisplayedViewIndex(page);
-			return;
-		}
 		View view = mChildViews.get(page);
 		if (view != null)
 			slideViewOntoScreen(view);
@@ -478,22 +470,6 @@ public class ReaderView
 			float velocityY) {
 		if (mScaling || mSelectingText)
 			return true;
-		if (!isContinuousScroll() && mScale <= MIN_SCALE) {
-			int direction = directionOfTravel(velocityX, velocityY);
-			int pageDelta = 0;
-			if (isHorizontalScroll()) {
-				if (direction == MOVING_LEFT) pageDelta = 1;
-				else if (direction == MOVING_RIGHT) pageDelta = -1;
-			} else {
-				if (direction == MOVING_UP) pageDelta = 1;
-				else if (direction == MOVING_DOWN) pageDelta = -1;
-			}
-			int nextPage = mCurrent + pageDelta;
-			if (pageDelta != 0 && nextPage >= 0 && nextPage < mAdapter.getCount()) {
-				setDisplayedViewIndex(nextPage);
-				return true;
-			}
-		}
 
 		View v = mChildViews.get(mCurrent);
 		if (v != null) {
@@ -571,13 +547,8 @@ public class ReaderView
 
 	public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX,
 			float distanceY) {
-		if (mSelectingText) {
-			if (mTextSelectionPage != null
-					&& mTextSelectionPage.extendTextSelection(e2.getX(), e2.getY())
-					&& mTextSelectionListener != null)
-				mTextSelectionListener.onTextSelectionChanged(true);
+		if (mSelectingText)
 			return true;
-		}
 		PageView pageView = (PageView)getDisplayedView();
 		if (!tapDisabled)
 			onDocMotion();
@@ -652,6 +623,12 @@ public class ReaderView
 		mScaleGestureDetector.onTouchEvent(event);
 		mGestureDetector.onTouchEvent(event);
 
+		if (mSelectingText && event.getActionMasked() == MotionEvent.ACTION_MOVE
+				&& mTextSelectionPage != null
+				&& mTextSelectionPage.extendTextSelection(event.getX(), event.getY())
+				&& mTextSelectionListener != null)
+			mTextSelectionListener.onTextSelectionChanged(true);
+
 		if ((event.getAction() & MotionEvent.ACTION_MASK) == MotionEvent.ACTION_DOWN) {
 			mUserInteracting = true;
 		}
@@ -715,7 +692,7 @@ public class ReaderView
 
 		if (!mResetLayout) {
 			// Move to next or previous if current is sufficiently off center
-			if (isContinuousScroll() && cv != null) {
+			if (cv != null) {
 				boolean move;
 				cvOffset = subScreenSizeOffset(cv);
 				// cv.getRight() may be out of date with the current scale

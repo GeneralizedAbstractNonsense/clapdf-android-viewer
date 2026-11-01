@@ -637,12 +637,8 @@ public class DocumentActivity extends Activity
 				int id = item.getItemId();
 				if (id == R.id.scroll_vertical)
 					mode = ReaderView.ScrollMode.Vertical;
-				else if (id == R.id.scroll_vertical_continuous)
-					mode = ReaderView.ScrollMode.VerticalContinuous;
 				else if (id == R.id.scroll_horizontal)
 					mode = ReaderView.ScrollMode.Horizontal;
-				else if (id == R.id.scroll_horizontal_continuous)
-					mode = ReaderView.ScrollMode.HorizontalContinuous;
 				else
 					return false;
 
@@ -719,12 +715,11 @@ public class DocumentActivity extends Activity
 		// Reenstate last state if it was recorded
 		SharedPreferences prefs = getPreferences(Context.MODE_PRIVATE);
 		setDarkMode(prefs.getBoolean("darkMode" + mDocKey, false));
-		ReaderView.ScrollMode scrollMode = ReaderView.ScrollMode.HorizontalContinuous;
-		try {
-			scrollMode = ReaderView.ScrollMode.valueOf(
-					prefs.getString("scrollMode" + mDocKey, scrollMode.name()));
-		} catch (IllegalArgumentException e) {
-		}
+		String savedScrollMode = prefs.getString("scrollMode" + mDocKey,
+				ReaderView.ScrollMode.Horizontal.name());
+		ReaderView.ScrollMode scrollMode =
+				"Vertical".equals(savedScrollMode) || "VerticalContinuous".equals(savedScrollMode)
+						? ReaderView.ScrollMode.Vertical : ReaderView.ScrollMode.Horizontal;
 		mDocView.setScrollMode(scrollMode);
 		updateScrollModeMenu();
 		mDocView.setDisplayedViewIndex(prefs.getInt("page"+mDocKey, 0));
@@ -868,12 +863,8 @@ public class DocumentActivity extends Activity
 		Menu menu = mScrollModePopupMenu.getMenu();
 		menu.findItem(R.id.scroll_vertical).setChecked(
 				mDocView.getScrollMode() == ReaderView.ScrollMode.Vertical);
-		menu.findItem(R.id.scroll_vertical_continuous).setChecked(
-				mDocView.getScrollMode() == ReaderView.ScrollMode.VerticalContinuous);
 		menu.findItem(R.id.scroll_horizontal).setChecked(
 				mDocView.getScrollMode() == ReaderView.ScrollMode.Horizontal);
-		menu.findItem(R.id.scroll_horizontal_continuous).setChecked(
-				mDocView.getScrollMode() == ReaderView.ScrollMode.HorizontalContinuous);
 	}
 
 	private void showButtons() {
