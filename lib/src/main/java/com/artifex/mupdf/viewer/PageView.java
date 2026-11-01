@@ -137,7 +137,8 @@ public class PageView extends ViewGroup {
 	private       Quad      mSearchBoxes[][];
 	private       Quad[]    mTextSelectionBoxes;
 	private       com.artifex.mupdf.fitz.Point mSelectionAnchor;
-	private       String    mSelectedText;
+	private       com.artifex.mupdf.fitz.Point mSelectionStart;
+	private       com.artifex.mupdf.fitz.Point mSelectionEnd;
 	protected     Link      mLinks[];
 	private       View      mSearchView;
 	private       boolean   mIsBlank;
@@ -222,7 +223,8 @@ public class PageView extends ViewGroup {
 		mSearchBoxes = null;
 		mTextSelectionBoxes = null;
 		mSelectionAnchor = null;
-		mSelectedText = null;
+		mSelectionStart = null;
+		mSelectionEnd = null;
 		mLinks = null;
 		if (mSearchView != null)
 			mSearchView.invalidate();
@@ -407,19 +409,20 @@ public class PageView extends ViewGroup {
 
 		if (mSearchView == null) {
 			mSearchView = new View(mContext) {
+				private final Paint paint = new Paint();
+				private final Path path = new Path();
+
 				@Override
 				protected void onDraw(final Canvas canvas) {
 					super.onDraw(canvas);
 					// Work out current total scale factor
 					// from source to view
 					final float scale = mSourceScale*(float)getWidth()/(float)mSize.x;
-					final Paint paint = new Paint();
-
 					if (!mIsBlank && mSearchBoxes != null) {
 						paint.setColor(HIGHLIGHT_COLOR);
 						for (Quad[] searchBox : mSearchBoxes) {
 							for (Quad q : searchBox) {
-								Path path = new Path();
+								path.rewind();
 								path.moveTo(q.ul_x * scale, q.ul_y * scale);
 								path.lineTo(q.ll_x * scale, q.ll_y * scale);
 								path.lineTo(q.lr_x * scale, q.lr_y * scale);
@@ -433,7 +436,7 @@ public class PageView extends ViewGroup {
 					if (!mIsBlank && mTextSelectionBoxes != null) {
 						paint.setColor(TEXT_SELECTION_COLOR);
 						for (Quad q : mTextSelectionBoxes) {
-							Path path = new Path();
+							path.rewind();
 							path.moveTo(q.ul_x * scale, q.ul_y * scale);
 							path.lineTo(q.ll_x * scale, q.ll_y * scale);
 							path.lineTo(q.lr_x * scale, q.lr_y * scale);
@@ -500,23 +503,27 @@ public class PageView extends ViewGroup {
 
 	private void setTextSelection(MuPDFCore.TextSelection selection) {
 		mTextSelectionBoxes = selection.quads;
-		mSelectedText = selection.text;
+		mSelectionStart = selection.start;
+		mSelectionEnd = selection.end;
 		if (mSearchView != null)
 			mSearchView.invalidate();
 	}
 
 	public String getSelectedText() {
-		return mSelectedText;
+		if (mSelectionStart == null || mSelectionEnd == null)
+			return null;
+		return mCore.copyText(mPageNumber, mSelectionStart, mSelectionEnd);
 	}
 
 	public boolean hasTextSelection() {
-		return mSelectedText != null;
+		return mSelectionStart != null && mSelectionEnd != null;
 	}
 
 	public void clearTextSelection() {
 		mTextSelectionBoxes = null;
 		mSelectionAnchor = null;
-		mSelectedText = null;
+		mSelectionStart = null;
+		mSelectionEnd = null;
 		if (mSearchView != null)
 			mSearchView.invalidate();
 	}

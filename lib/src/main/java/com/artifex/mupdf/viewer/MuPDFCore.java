@@ -250,22 +250,33 @@ public class MuPDFCore
 	}
 
 	public synchronized TextSelection selectText(int pageNum, Point start, Point end, int mode) {
+		StructuredText text = getStructuredText(pageNum);
+		if (text == null)
+			return null;
+
+		text.snapSelection(start, end, mode);
+		Quad[] quads = text.highlight(start, end);
+		if (quads == null || quads.length == 0)
+			return null;
+		return new TextSelection(new Point(start), new Point(end),
+				quads);
+	}
+
+	public synchronized String copyText(int pageNum, Point start, Point end) {
+		StructuredText text = getStructuredText(pageNum);
+		return text != null ? text.copy(start, end) : null;
+	}
+
+	private StructuredText getStructuredText(int pageNum) {
 		gotoPage(pageNum);
 		if (page == null)
 			return null;
-
 		if (structuredText == null || structuredTextPage != pageNum) {
 			clearStructuredText();
 			structuredText = page.toStructuredText();
 			structuredTextPage = pageNum;
 		}
-
-		structuredText.snapSelection(start, end, mode);
-		String text = structuredText.copy(start, end);
-		if (text == null || text.trim().length() == 0)
-			return null;
-		return new TextSelection(new Point(start), new Point(end),
-				structuredText.highlight(start, end), text);
+		return structuredText;
 	}
 
 	private void clearStructuredText() {
@@ -279,13 +290,11 @@ public class MuPDFCore
 		public final Point start;
 		public final Point end;
 		public final Quad[] quads;
-		public final String text;
 
-		TextSelection(Point start, Point end, Quad[] quads, String text) {
+		TextSelection(Point start, Point end, Quad[] quads) {
 			this.start = start;
 			this.end = end;
 			this.quads = quads;
-			this.text = text;
 		}
 	}
 

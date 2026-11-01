@@ -680,7 +680,7 @@ public class DocumentActivity extends Activity
 		// Reenstate last state if it was recorded
 		SharedPreferences prefs = getPreferences(Context.MODE_PRIVATE);
 		setDarkMode(prefs.getBoolean("darkMode" + mDocKey, false));
-		ReaderView.ScrollMode scrollMode = ReaderView.ScrollMode.HorizontalContinuous;
+		ReaderView.ScrollMode scrollMode = ReaderView.ScrollMode.VerticalContinuous;
 		try {
 			scrollMode = ReaderView.ScrollMode.valueOf(
 					prefs.getString("scrollMode" + mDocKey, scrollMode.name()));

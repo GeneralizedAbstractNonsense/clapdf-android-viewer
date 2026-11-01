@@ -34,6 +34,7 @@ public class ReaderView
 	private boolean mSelectingText;
 	private int tapPageMargin;
 	private TextSelectionListener mTextSelectionListener;
+	private PageView mTextSelectionPage;
 
 	private static final int MOVING_DIAGONALLY = 0;
 	private static final int MOVING_LEFT       = 1;
@@ -49,7 +50,7 @@ public class ReaderView
 
 	public enum ScrollMode {Vertical, VerticalContinuous, Horizontal, HorizontalContinuous};
 
-	private ScrollMode mScrollMode = ScrollMode.HorizontalContinuous;
+	private ScrollMode mScrollMode = ScrollMode.VerticalContinuous;
 
 	private PageAdapter           mAdapter;
 	protected int               mCurrent;    // Adapter's index for the current view
@@ -170,7 +171,8 @@ public class ReaderView
 	}
 
 	public String getSelectedText() {
-		PageView pageView = (PageView)getDisplayedView();
+		PageView pageView = mTextSelectionPage != null
+				? mTextSelectionPage : (PageView)getDisplayedView();
 		return pageView != null ? pageView.getSelectedText() : null;
 	}
 
@@ -184,6 +186,7 @@ public class ReaderView
 			}
 		}
 		mSelectingText = false;
+		mTextSelectionPage = null;
 		if (hadSelection && mTextSelectionListener != null)
 			mTextSelectionListener.onTextSelectionChanged(false);
 	}
@@ -541,19 +544,32 @@ public class ReaderView
 	}
 
 	public void onLongPress(MotionEvent e) {
-		PageView pageView = (PageView)getDisplayedView();
+		if (mTextSelectionPage != null)
+			clearTextSelection();
+		PageView pageView = getPageViewAt(e.getX(), e.getY());
 		if (pageView != null && pageView.startTextSelection(e.getX(), e.getY())) {
+			mTextSelectionPage = pageView;
 			mSelectingText = true;
 			if (mTextSelectionListener != null)
 				mTextSelectionListener.onTextSelectionChanged(true);
 		}
 	}
 
+	private PageView getPageViewAt(float x, float y) {
+		for (int i = 0; i < mChildViews.size(); i++) {
+			PageView pageView = (PageView)mChildViews.valueAt(i);
+			if (x >= pageView.getLeft() && x < pageView.getRight()
+					&& y >= pageView.getTop() && y < pageView.getBottom())
+				return pageView;
+		}
+		return null;
+	}
+
 	public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX,
 			float distanceY) {
 		if (mSelectingText) {
-			PageView pageView = (PageView)getDisplayedView();
-			if (pageView != null && pageView.extendTextSelection(e2.getX(), e2.getY())
+			if (mTextSelectionPage != null
+					&& mTextSelectionPage.extendTextSelection(e2.getX(), e2.getY())
 					&& mTextSelectionListener != null)
 				mTextSelectionListener.onTextSelectionChanged(true);
 			return true;
@@ -603,6 +619,8 @@ public class ReaderView
 	}
 
 	public boolean onScaleBegin(ScaleGestureDetector detector) {
+		if (mTextSelectionPage != null)
+			clearTextSelection();
 		tapDisabled = true;
 		mScaling = true;
 		// Ignore any scroll amounts yet to be accounted for: the
@@ -1004,11 +1022,11 @@ public class ReaderView
 	public boolean onSingleTapUp(MotionEvent e) {
 		Link link = null;
 		if (!tapDisabled) {
-			PageView pageView = (PageView) getDisplayedView();
-			if (pageView != null && pageView.hasTextSelection()) {
+			if (mTextSelectionPage != null && mTextSelectionPage.hasTextSelection()) {
 				clearTextSelection();
 				return true;
 			}
+			PageView pageView = (PageView) getDisplayedView();
 			if (mLinksEnabled && pageView != null) {
 				int page = pageView.hitLink(e.getX(), e.getY());
 				if (page > 0) {
