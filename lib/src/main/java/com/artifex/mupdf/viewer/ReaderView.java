@@ -48,7 +48,7 @@ public class ReaderView
 	private static final float MIN_SCALE        = 1.0f;
 	private static final float MAX_SCALE        = 64.0f;
 
-	public enum ScrollMode {Vertical, Horizontal};
+	public enum ScrollMode {Vertical, Horizontal, Continuous};
 
 	private ScrollMode mScrollMode = ScrollMode.Horizontal;
 
@@ -164,6 +164,10 @@ public class ReaderView
 
 	private boolean isHorizontalScroll() {
 		return mScrollMode == ScrollMode.Horizontal;
+	}
+
+	private int getPageGap() {
+		return mScrollMode == ScrollMode.Continuous ? 0 : GAP;
 	}
 
 	public String getSelectedText() {
@@ -698,9 +702,9 @@ public class ReaderView
 				// cv.getRight() may be out of date with the current scale
 				// so add left to the measured width for the correct position
 				if (isHorizontalScroll())
-					move = cv.getLeft() + cv.getMeasuredWidth() + cvOffset.x + GAP/2 + mXScroll < getWidth()/2;
+					move = cv.getLeft() + cv.getMeasuredWidth() + cvOffset.x + getPageGap()/2 + mXScroll < getWidth()/2;
 				else
-					move = cv.getTop() + cv.getMeasuredHeight() + cvOffset.y + GAP/2 + mYScroll < getHeight()/2;
+					move = cv.getTop() + cv.getMeasuredHeight() + cvOffset.y + getPageGap()/2 + mYScroll < getHeight()/2;
 				if (move && mCurrent + 1 < mAdapter.getCount()) {
 					postUnsettle(cv);
 					// post to invoke test for end of animation
@@ -713,9 +717,9 @@ public class ReaderView
 				}
 
 				if (isHorizontalScroll())
-					move = cv.getLeft() - cvOffset.x - GAP/2 + mXScroll >= getWidth()/2;
+					move = cv.getLeft() - cvOffset.x - getPageGap()/2 + mXScroll >= getWidth()/2;
 				else
-					move = cv.getTop() - cvOffset.y - GAP/2 + mYScroll >= getHeight()/2;
+					move = cv.getTop() - cvOffset.y - getPageGap()/2 + mYScroll >= getHeight()/2;
 				if (move && mCurrent > 0) {
 					postUnsettle(cv);
 					// post to invoke test for end of animation
@@ -811,13 +815,14 @@ public class ReaderView
 			Point leftOffset = subScreenSizeOffset(lv);
 			if (isHorizontalScroll())
 			{
-				int gap = leftOffset.x + GAP + cvOffset.x;
+				int gap = leftOffset.x + getPageGap() + cvOffset.x;
 				lv.layout(cvLeft - lv.getMeasuredWidth() - gap,
 						(cvBottom + cvTop - lv.getMeasuredHeight())/2,
 						cvLeft - gap,
 						(cvBottom + cvTop + lv.getMeasuredHeight())/2);
 			} else {
-				int gap = leftOffset.y + GAP + cvOffset.y;
+				int gap = mScrollMode == ScrollMode.Continuous
+						? 0 : leftOffset.y + getPageGap() + cvOffset.y;
 				lv.layout((cvLeft + cvRight - lv.getMeasuredWidth())/2,
 						cvTop - lv.getMeasuredHeight() - gap,
 						(cvLeft + cvRight + lv.getMeasuredWidth())/2,
@@ -830,13 +835,14 @@ public class ReaderView
 			Point rightOffset = subScreenSizeOffset(rv);
 			if (isHorizontalScroll())
 			{
-				int gap = cvOffset.x + GAP + rightOffset.x;
+				int gap = cvOffset.x + getPageGap() + rightOffset.x;
 				rv.layout(cvRight + gap,
 						(cvBottom + cvTop - rv.getMeasuredHeight())/2,
 						cvRight + rv.getMeasuredWidth() + gap,
 						(cvBottom + cvTop + rv.getMeasuredHeight())/2);
 			} else {
-				int gap = cvOffset.y + GAP + rightOffset.y;
+				int gap = mScrollMode == ScrollMode.Continuous
+						? 0 : cvOffset.y + getPageGap() + rightOffset.y;
 				rv.layout((cvLeft + cvRight - rv.getMeasuredWidth())/2,
 						cvBottom + gap,
 						(cvLeft + cvRight + rv.getMeasuredWidth())/2,

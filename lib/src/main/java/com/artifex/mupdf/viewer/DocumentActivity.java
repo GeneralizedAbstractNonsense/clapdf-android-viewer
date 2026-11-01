@@ -639,6 +639,8 @@ public class DocumentActivity extends Activity
 					mode = ReaderView.ScrollMode.Vertical;
 				else if (id == R.id.scroll_horizontal)
 					mode = ReaderView.ScrollMode.Horizontal;
+				else if (id == R.id.scroll_continuous)
+					mode = ReaderView.ScrollMode.Continuous;
 				else
 					return false;
 
@@ -717,9 +719,13 @@ public class DocumentActivity extends Activity
 		setDarkMode(prefs.getBoolean("darkMode" + mDocKey, false));
 		String savedScrollMode = prefs.getString("scrollMode" + mDocKey,
 				ReaderView.ScrollMode.Horizontal.name());
-		ReaderView.ScrollMode scrollMode =
-				"Vertical".equals(savedScrollMode) || "VerticalContinuous".equals(savedScrollMode)
-						? ReaderView.ScrollMode.Vertical : ReaderView.ScrollMode.Horizontal;
+		ReaderView.ScrollMode scrollMode;
+		if ("Vertical".equals(savedScrollMode) || "VerticalContinuous".equals(savedScrollMode))
+			scrollMode = ReaderView.ScrollMode.Vertical;
+		else if ("Continuous".equals(savedScrollMode))
+			scrollMode = ReaderView.ScrollMode.Continuous;
+		else
+			scrollMode = ReaderView.ScrollMode.Horizontal;
 		mDocView.setScrollMode(scrollMode);
 		updateScrollModeMenu();
 		mDocView.setDisplayedViewIndex(prefs.getInt("page"+mDocKey, 0));
@@ -865,6 +871,8 @@ public class DocumentActivity extends Activity
 				mDocView.getScrollMode() == ReaderView.ScrollMode.Vertical);
 		menu.findItem(R.id.scroll_horizontal).setChecked(
 				mDocView.getScrollMode() == ReaderView.ScrollMode.Horizontal);
+		menu.findItem(R.id.scroll_continuous).setChecked(
+				mDocView.getScrollMode() == ReaderView.ScrollMode.Continuous);
 	}
 
 	private void showButtons() {

@@ -10,6 +10,7 @@
 	<string name="scroll_mode">Scroll mode</string>
 	<string name="scroll_vertical">Vertical</string>
 	<string name="scroll_horizontal">Horizontal</string>
+	<string name="scroll_continuous">Continuous</string>
 	<string name="no_further_occurrences_found">No further occurrences found</string>
 	<string name="not_supported">Not supported</string>
 	<string name="okay">Okay</string>

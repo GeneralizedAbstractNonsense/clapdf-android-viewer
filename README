@@ -9,10 +9,10 @@ application. Documents can be opened from the app's file picker or shared with
 the app from another application.
 
 The reader opens in MuPDF's original horizontal continuous scrolling mode.
-Choose Vertical or Horizontal scrolling from the reader toolbar; both modes
-scroll continuously between pages. Long-press a word and drag across the text
-to select multiple words. Android's standard floating selection toolbar lets
-you copy the selected text.
+Choose Vertical, Horizontal, or Continuous from the reader toolbar. Continuous
+scrolls vertically with no gap between pages, like a web page. Long-press a
+word and drag across the text to select multiple words. Android's standard
+floating selection toolbar lets you copy the selected text.
 
 ## License
 
