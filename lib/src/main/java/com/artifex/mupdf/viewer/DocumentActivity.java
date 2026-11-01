@@ -57,8 +57,11 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import java.io.FileNotFoundException;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Locale;
@@ -74,6 +77,8 @@ public class DocumentActivity extends Activity
 
 	private final int    OUTLINE_REQUEST=0;
 	private MuPDFCore    core;
+	private File convertedDocumentFile;
+	private FileSeekableInputStream convertedDocumentStream;
 	private String       mDocTitle;
 	private String       mDocKey;
 	private ReaderView   mDocView;
@@ -223,6 +228,11 @@ public class DocumentActivity extends Activity
 
 		Log.i(APP, "Opening document " + uri);
 
+		if (isCsvDocument(mimetype, mDocTitle))
+			return openConvertedDocument(uri, cr, true);
+		if (isOdtDocument(mimetype, mDocTitle))
+			return openConvertedDocument(uri, cr, false);
+
 		InputStream is = cr.openInputStream(uri);
 		byte[] buf = null;
 		int used = -1;
@@ -257,6 +267,66 @@ public class DocumentActivity extends Activity
 		} else {
 			Log.i(APP, "  Opening document from stream");
 			return openStream(new ContentInputStream(cr, uri, size), mimetype);
+		}
+	}
+
+	private boolean isCsvDocument(String mimetype, String filename) {
+		String type = mimetype == null ? "" : mimetype.toLowerCase(Locale.ROOT);
+		String name = filename == null ? "" : filename.toLowerCase(Locale.ROOT);
+		return type.equals("text/csv")
+				|| type.equals("text/comma-separated-values")
+				|| type.equals("text/x-csv")
+				|| type.equals("application/csv")
+				|| type.equals("application/x-csv")
+				|| type.equals("application/vnd.ms-excel")
+				|| name.endsWith(".csv");
+	}
+
+	private boolean isOdtDocument(String mimetype, String filename) {
+		String type = mimetype == null ? "" : mimetype.toLowerCase(Locale.ROOT);
+		String name = filename == null ? "" : filename.toLowerCase(Locale.ROOT);
+		return type.equals("application/vnd.oasis.opendocument.text")
+				|| type.equals("application/x-vnd.oasis.opendocument.text")
+				|| name.endsWith(".odt");
+	}
+
+	private MuPDFCore openConvertedDocument(Uri uri, ContentResolver resolver, boolean csv)
+			throws IOException {
+		File htmlFile = File.createTempFile("clapdf-converted-", ".html", getCacheDir());
+		FileSeekableInputStream htmlStream = null;
+		boolean opened = false;
+		try {
+			try (InputStream input = resolver.openInputStream(uri);
+				 OutputStream output = new FileOutputStream(htmlFile)) {
+				if (input == null)
+					throw new IOException("Unable to open document input stream");
+				if (csv)
+					TextDocumentConverter.convertCsv(input, output);
+				else
+					TextDocumentConverter.convertOdt(input, output);
+			}
+
+			htmlStream = new FileSeekableInputStream(htmlFile);
+			MuPDFCore convertedCore = openStream(htmlStream, "text/html");
+			if (convertedCore == null)
+				throw new IOException("Unable to open converted document");
+
+			convertedDocumentFile = htmlFile;
+			convertedDocumentStream = htmlStream;
+			opened = true;
+			return convertedCore;
+		} finally {
+			if (!opened) {
+				if (htmlStream != null) {
+					try {
+						htmlStream.close();
+					} catch (IOException e) {
+						Log.e(APP, "Unable to close converted document stream", e);
+					}
+				}
+				if (!htmlFile.delete())
+					Log.w(APP, "Unable to delete temporary converted document " + htmlFile);
+			}
 		}
 	}
 
@@ -783,6 +853,19 @@ public class DocumentActivity extends Activity
 		if (core != null)
 			core.onDestroy();
 		core = null;
+		if (convertedDocumentStream != null) {
+			try {
+				convertedDocumentStream.close();
+			} catch (IOException e) {
+				Log.e(APP, "Unable to close converted document stream", e);
+			}
+			convertedDocumentStream = null;
+		}
+		if (convertedDocumentFile != null) {
+			if (!convertedDocumentFile.delete())
+				Log.w(APP, "Unable to delete temporary converted document " + convertedDocumentFile);
+			convertedDocumentFile = null;
+		}
 		super.onDestroy();
 	}
 

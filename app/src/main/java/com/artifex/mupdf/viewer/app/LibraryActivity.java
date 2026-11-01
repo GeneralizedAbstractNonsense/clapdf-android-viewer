@@ -38,6 +38,17 @@ public class LibraryActivity extends Activity
 				"application/epub+zip",
 				"application/x-fictionbook",
 				"application/x-mobipocket-ebook",
+				"text/plain",
+				"text/*",
+				"text/csv",
+				"text/comma-separated-values",
+				"text/x-csv",
+				"application/csv",
+				"application/x-csv",
+				"application/vnd.ms-excel",
+				"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+				"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+				"application/vnd.oasis.opendocument.text",
 				// ... and the ones android doesn't know about
 				"application/octet-stream"
 			});
