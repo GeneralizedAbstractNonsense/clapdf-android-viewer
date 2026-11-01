@@ -519,6 +519,35 @@ public class PageView extends ViewGroup {
 		return mSelectionStart != null && mSelectionEnd != null;
 	}
 
+	public boolean getTextSelectionBounds(Rect bounds) {
+		if (!hasTextSelection() || mTextSelectionBoxes == null || mTextSelectionBoxes.length == 0
+				|| mSize == null || mSize.x == 0 || getWidth() == 0)
+			return false;
+
+		float scale = mSourceScale * (float)getWidth() / (float)mSize.x;
+		float left = Float.MAX_VALUE;
+		float top = Float.MAX_VALUE;
+		float right = Float.NEGATIVE_INFINITY;
+		float bottom = Float.NEGATIVE_INFINITY;
+		for (Quad quad : mTextSelectionBoxes) {
+			left = Math.min(left, Math.min(Math.min(quad.ul_x, quad.ll_x),
+					Math.min(quad.lr_x, quad.ur_x)));
+			top = Math.min(top, Math.min(Math.min(quad.ul_y, quad.ll_y),
+					Math.min(quad.lr_y, quad.ur_y)));
+			right = Math.max(right, Math.max(Math.max(quad.ul_x, quad.ll_x),
+					Math.max(quad.lr_x, quad.ur_x)));
+			bottom = Math.max(bottom, Math.max(Math.max(quad.ul_y, quad.ll_y),
+					Math.max(quad.lr_y, quad.ur_y)));
+		}
+
+		bounds.set(
+				getLeft() + (int)Math.floor(left * scale),
+				getTop() + (int)Math.floor(top * scale),
+				getLeft() + (int)Math.ceil(right * scale),
+				getTop() + (int)Math.ceil(bottom * scale));
+		return !bounds.isEmpty();
+	}
+
 	public void clearTextSelection() {
 		mTextSelectionBoxes = null;
 		mSelectionAnchor = null;

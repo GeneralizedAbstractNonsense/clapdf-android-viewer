@@ -50,7 +50,7 @@ public class ReaderView
 
 	public enum ScrollMode {Vertical, VerticalContinuous, Horizontal, HorizontalContinuous};
 
-	private ScrollMode mScrollMode = ScrollMode.VerticalContinuous;
+	private ScrollMode mScrollMode = ScrollMode.HorizontalContinuous;
 
 	private PageAdapter           mAdapter;
 	protected int               mCurrent;    // Adapter's index for the current view
@@ -174,6 +174,10 @@ public class ReaderView
 		PageView pageView = mTextSelectionPage != null
 				? mTextSelectionPage : (PageView)getDisplayedView();
 		return pageView != null ? pageView.getSelectedText() : null;
+	}
+
+	public boolean getTextSelectionBounds(Rect bounds) {
+		return mTextSelectionPage != null && mTextSelectionPage.getTextSelectionBounds(bounds);
 	}
 
 	public void clearTextSelection() {
@@ -578,8 +582,10 @@ public class ReaderView
 		if (!tapDisabled)
 			onDocMotion();
 		if (!mScaling) {
-			mXScroll -= distanceX;
-			mYScroll -= distanceY;
+			if (isHorizontalScroll() || mScale > MIN_SCALE)
+				mXScroll -= distanceX;
+			if (!isHorizontalScroll() || mScale > MIN_SCALE)
+				mYScroll -= distanceY;
 			requestLayout();
 		}
 		return true;

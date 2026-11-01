@@ -1,15 +1,17 @@
-# MuPDF Android Viewer
+# ClaPDF Android Viewer
 
-This project is a simplified variant of the full MuPDF Android app that only
-supports viewing documents. The annotation editing and form filling features
-are not present here.
+ClaPDF is an Android document viewer based on MuPDF. It supports viewing PDF
+and other document formats; annotation editing and form filling are not
+included.
 
-This project builds both a viewer library and a viewer application.
-The viewer library can be used to view PDF and other documents.
+The project builds a reusable viewer library and the ClaPDF Android
+application. Documents can be opened from the app's file picker or shared with
+the app from another application.
 
-The application is a simple file chooser that shows a list of documents on the
-external storage on your device, and hands off the selected file to the viewer
-library.
+The reader opens in MuPDF's original horizontal continuous scrolling mode.
+Other horizontal and vertical scrolling modes can be selected from the reader
+toolbar. Long-press selectable text to bring up Android's standard floating
+selection toolbar and copy the selected text.
 
 ## License
 
@@ -29,30 +31,33 @@ with this program. If not, see <http://www.gnu.org/licenses/>.
 
 ## Prerequisites
 
-You need a working Android development environment, consisting of the Android
-SKD and the Android NDK. The easiest way is to use Android Studio to download
-and install the SDK and NDK.
+You need a working Android development environment with the Android SDK and
+Java. Android Studio can install and manage the SDK. The project includes a
+Gradle wrapper, so a separate Gradle installation is not required.
 
 ## Building
 
-Download the project using Git:
+Clone this repository:
 
-	$ git clone git://git.ghostscript.com/mupdf-android-viewer.git
+	$ git clone https://github.com/GeneralizedAbstractNonsense/clapdf-android-viewer.git
+	$ cd clapdf-android-viewer
 
-Edit the local.properties file to point to your Android SDK directory:
+Set the Android SDK location either in the `ANDROID_HOME` environment variable
+or in `local.properties`:
 
 	$ echo sdk.dir=$HOME/Android/Sdk > local.properties
 
-If all tools have been installed as per the prerequisites, build the app using
-the gradle wrapper:
+Build the debug APKs:
 
-	$ ./gradlew assembleRelease
+	$ ./gradlew assembleDebug
 
-If all has gone well, you can now find the app APKs in app/build/outputs/apk/,
-with one APK for each ABI. There is also a universal APK which supports all
-ABIs.
+The APKs are written to `app/build/outputs/apk/debug/`. ABI-specific APKs and
+a universal APK are generated. The universal APK is
+`app/build/outputs/apk/debug/app-universal-debug.apk`.
 
-The library component can be found in lib/build/outputs/aar/lib-release.aar.
+To build the release variant, run `./gradlew assembleRelease`. A signed
+release requires the signing properties described in [Release](#release).
+The viewer library is built at `lib/build/outputs/aar/`.
 
 ## Running
 
@@ -75,7 +80,7 @@ Then install the app on the device:
 
 To start the installed app on the device:
 
-	$ adb shell am start -n com.artifex.mupdf.viewer.app/.LibraryActivity
+	$ adb shell am start -n com.clapdf.android.viewer/com.artifex.mupdf.viewer.app.LibraryActivity
 
 To see the error and debugging message log:
 

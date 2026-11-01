@@ -2,6 +2,7 @@ package com.artifex.mupdf.viewer;
 
 import com.artifex.mupdf.fitz.SeekableInputStream;
 
+import android.annotation.TargetApi;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -154,6 +155,37 @@ public class DocumentActivity extends Activity
 				mDocView.clearTextSelection();
 		}
 	};
+
+	@TargetApi(Build.VERSION_CODES.M)
+	private ActionMode.Callback getFloatingTextSelectionActionModeCallback() {
+		return new ActionMode.Callback2() {
+			@Override
+			public boolean onCreateActionMode(ActionMode mode, Menu menu) {
+				return mTextSelectionActionModeCallback.onCreateActionMode(mode, menu);
+			}
+
+			@Override
+			public boolean onPrepareActionMode(ActionMode mode, Menu menu) {
+				return mTextSelectionActionModeCallback.onPrepareActionMode(mode, menu);
+			}
+
+			@Override
+			public boolean onActionItemClicked(ActionMode mode, MenuItem item) {
+				return mTextSelectionActionModeCallback.onActionItemClicked(mode, item);
+			}
+
+			@Override
+			public void onDestroyActionMode(ActionMode mode) {
+				mTextSelectionActionModeCallback.onDestroyActionMode(mode);
+			}
+
+			@Override
+			public void onGetContentRect(ActionMode mode, View view, Rect outRect) {
+				if (!mDocView.getTextSelectionBounds(outRect))
+					outRect.set(0, 0, view.getWidth(), view.getHeight());
+			}
+		};
+	}
 
 	private String toHex(byte[] digest) {
 		StringBuilder builder = new StringBuilder(2 * digest.length);
@@ -460,8 +492,15 @@ public class DocumentActivity extends Activity
 			@Override
 			public void onTextSelectionChanged(boolean hasSelection) {
 				if (hasSelection) {
-					if (mTextSelectionActionMode == null)
-						mTextSelectionActionMode = startActionMode(mTextSelectionActionModeCallback);
+					if (mTextSelectionActionMode == null) {
+						if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+							mTextSelectionActionMode = mDocView.startActionMode(
+									getFloatingTextSelectionActionModeCallback(), ActionMode.TYPE_FLOATING);
+						if (mTextSelectionActionMode == null)
+							mTextSelectionActionMode = startActionMode(mTextSelectionActionModeCallback);
+					} else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+						mTextSelectionActionMode.invalidateContentRect();
+					}
 				} else if (mTextSelectionActionMode != null) {
 					mTextSelectionActionMode.finish();
 				}
@@ -680,7 +719,7 @@ public class DocumentActivity extends Activity
 		// Reenstate last state if it was recorded
 		SharedPreferences prefs = getPreferences(Context.MODE_PRIVATE);
 		setDarkMode(prefs.getBoolean("darkMode" + mDocKey, false));
-		ReaderView.ScrollMode scrollMode = ReaderView.ScrollMode.VerticalContinuous;
+		ReaderView.ScrollMode scrollMode = ReaderView.ScrollMode.HorizontalContinuous;
 		try {
 			scrollMode = ReaderView.ScrollMode.valueOf(
 					prefs.getString("scrollMode" + mDocKey, scrollMode.name()));
